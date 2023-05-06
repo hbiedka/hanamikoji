@@ -149,13 +149,42 @@ class Player:
 
         return cards_to_use
 
+class MoveResult:
+    player = None
+    opponent = None
+    action = 0
+    cards_for_opp = None
+    opp_choice = None
+    move_error = None
+
+    def __init__(self,player,action):
+        #default init if no opponent action required
+        self.player = player
+        self.action = action
+
+    def request_for_opponent(self,opponent,cards_for_opp):
+        #add request for opponent
+        self.opponent = opponent
+        self.cards_for_opp = cards_for_opp
+        return self
+    
+    def error(self,err):
+        self.move_error = err
+        return self
+
+    def has_error(self):
+        return self.move_error is not None
+    
+    def has_request_for_opp(self):
+        return self.opponent is not None
+
 class Game:
     table_cards = list()
     card_pool = list()
     players = list()
 
     round_result = None
-    player_action_cb = None
+    #player_action_cb = None
 
     def __init__(self):
         """
@@ -234,13 +263,16 @@ class Game:
         player.assign_card(self.card_pool.pop())
 
     def move(self,player,action,cards):
+
+        #create move output
+        result = MoveResult(player,action)
         #TODO validate player
         if player not in self.players:
-            return -3
+            return result.error("Unknown player")
 
         # can player move
         if action not in player.actions_available():
-            return -1
+            return result.error(f"Player {player.id} cannot do that")
         
         #todo validate card set
         if action == 0:
@@ -250,19 +282,35 @@ class Game:
         elif action == 1:
             #remove two cards
             if self.card_ids_repeat(cards):
-                return -2
+                return result.error("Cards repeated")
             player.cards_removed = player.use_cards(cards)
 
         elif action in [2,3]:
             if self.card_ids_repeat(cards):
-                return -2
+                return result.error("Cards repeated")
 
             #double pair or triplet
             opponent = self.opponent_of(player)
             cards_for_opp = player.use_cards(cards)
 
             #request action
-            opp_action = self.player_action_cb(opponent,action,cards_for_opp)
+            return result.request_for_opponent(opponent,cards_for_opp)
+        
+        return result
+    
+    def post_move(self,result):
+
+        if result.has_error():
+            print("Move with error, ignoring")
+            return
+
+        player = result.player
+        action = result.action
+
+        if action in [2,3]:
+            opponent = result.opponent
+            cards_for_opp = result.cards_for_opp
+            opp_action = result.opp_choice
 
             if action == 2:
                 opp_cards = cards_for_opp.pop(opp_action)
@@ -282,9 +330,8 @@ class Game:
                 for card in cards_for_opp:
                     card.add_player_card(player)
 
+        #use action if alright
         player.use_action(action)
-
-        return 0
 
     def is_end(self):
         can_somebody_move = False
@@ -375,7 +422,10 @@ class Game:
 
 g = None
 
-def player_action(player,action,cards):
+def player_action(result):
+    player = result.opponent
+    action = result.action
+    cards = result.cards_for_opp
     print(f"action for player {player.id}: {action_names[action]}")
 
     if action == 2:
@@ -393,12 +443,12 @@ def player_action(player,action,cards):
             print("out of range!")
             continue
 
-        return out
+        result.opp_choice = out
+        return
 
 
 def play():
     g = Game()
-    g.player_action_cb = player_action
 
     player_starting = g.first_player()
     player = g.first_player()
@@ -437,13 +487,18 @@ def play():
             else:
                 continue
 
-            error = g.move(player,action,cards)
-            if error == 0:
-                break
-            elif error == -1:
-                print("move not available or unknown")
-            elif error == -2:
-                print("the same card used multiple times")
+            result = g.move(player,action,cards)
+
+            if result.has_error():
+                print(result.move_error)
+                continue
+            elif result.has_request_for_opp():
+                player_action(result)
+
+            #finish move
+            g.post_move(result)
+            break
+
 
         if (g.is_end()):
             print("game end!")
@@ -468,14 +523,10 @@ def play():
 
 import time
 
-def test_cb(player,action,cards):
-    time.sleep(0.5)
-    return 0
 
 def test():
 
     g = Game()
-    g.player_action_cb = test_cb
 
     player_starting = g.first_player()
     player = g.first_player()
@@ -490,19 +541,27 @@ def test():
                 g.premove(player)
                 g.view()
 
-                e = 0
+                cards_comb = []
                 if action == 0:
-                    e = g.move(player,0,[0])
+                    cards_comb = [0]
                 elif action == 1:
-                    e = g.move(player,1,[0,1])
+                    cards_comb = [0,1]
                 elif action == 2:
-                    e = g.move(player,2,[[0,1],[2,3]])
+                    cards_comb = [[0,1],[2,3]]
                 elif action == 3:
-                    e = g.move(player,3,[0,1,2])
+                    cards_comb = [0,1,2]
 
-                if e != 0:
-                    print(f"move error {e}")
+                result = g.move(player,action,cards_comb)
+
+                if result.has_error():
+                    print(result.move_error)
                     return
+                elif result.has_request_for_opp():
+                    time.sleep(0.5)
+                    result.opp_choice = 0
+
+                #finish move
+                g.post_move(result)
 
                 if (g.is_end()):
                     print("game end!")
@@ -525,5 +584,5 @@ def test():
 
 
 if __name__ == "__main__":
-    test()
-    #play()
+    #test()
+    play()
