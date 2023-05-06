@@ -19,12 +19,13 @@ class TableCard:
 
     def start(self):
         self.player_cards = list()
+        #create empty deck of cards for each player
         for player in self.players:
             self.player_cards.append(0)
 
     def add_player_card(self,player):
         for index, player_of in enumerate(self.players):
-            if player.id == player_of.id:
+            if player is player_of:
                 self.player_cards[index]+=1
                 return True
         
@@ -33,18 +34,19 @@ class TableCard:
 
     def move_coin(self):
         max_value = None
+        winner_index = None
 
         for index, cards in enumerate(self.player_cards):
-            if max_value is None:
+            if max_value is None or cards > max_value:
+                #if first iteration or some player has more cards than others
                 max_value = cards
-            elif cards > max_value:
-                max_value = cards
+                winner_index = index
             elif cards == max_value:
-                #draw - do nothing
+                #draw - winner not recognised
                 return
-            
-        winner_index = self.player_cards.index(max_value)
-        self.coin_owner = self.players[winner_index]
+
+        if winner_index is not None:
+            self.coin_owner = self.players[winner_index]
         return
 
 
@@ -53,8 +55,8 @@ class TableCard:
 
     def view(self):
         #TODO refactorize
-        coin_pl0 = "*" if self.coin_owner is not None and self.coin_owner.id==1 else " "
-        coin_pl1 = "*" if self.coin_owner is not None and self.coin_owner.id==2 else " "
+        coin_pl0 = "*" if self.players[0] is self.coin_owner else " "
+        coin_pl1 = "*" if self.players[1] is self.coin_owner else " "
         print(f"{self.player_cards[0]} {coin_pl0}[{self.full_name()}\t]{coin_pl1} {self.player_cards[1]}")
 
     def full_name(self):
@@ -171,6 +173,9 @@ class Game:
             TableCard("pink",5,self.players)
         ]
 
+        #initialize first game
+        self.start()
+
 
     def start(self):
 
@@ -181,9 +186,9 @@ class Game:
 
         #set pool
         self.card_pool = list()
-        for card_id in range(len(self.table_cards)):
-            for i in range(self.table_cards[card_id].points):
-                self.card_pool.append(card_id)
+        for card in self.table_cards:
+            for _ in range(card.points):
+                self.card_pool.append(card)
 
 
         #shuffle
@@ -193,26 +198,16 @@ class Game:
             player.start()
 
         #give cards for players
-        for i in range(6):
+        for _ in range(6):
             for player in self.players:
                 player.assign_card(self.card_pool.pop())
-
-
-    #deprecated
-    def opposite_player(self,player):
-        if player == 0:
-            return 1
-        elif player == 1:
-            return 0
-        else:
-            return -1
         
     def first_player(self):
         return self.players[0]
 
     def opponent_of(self,current_player):
         for player in self.players:
-            if player.id != current_player.id:
+            if player is not current_player:
                 return player
             
         #impossible - no opponents
@@ -274,18 +269,18 @@ class Game:
                 mover_cards = cards_for_opp[0]
 
                 for card in mover_cards:
-                    self.table_cards[card].add_player_card(player)
+                    card.add_player_card(player)
                 
                 for card in opp_cards:
-                    self.table_cards[card].add_player_card(opponent)
+                    card.add_player_card(opponent)
                 
             elif action == 3:
                 opp_card = cards_for_opp.pop(opp_action)
 
-                self.table_cards[opp_card].add_player_card(opponent)
+                opp_card.add_player_card(opponent)
 
                 for card in cards_for_opp:
-                    self.table_cards[card].add_player_card(player)
+                    card.add_player_card(player)
 
         player.use_action(action)
 
@@ -303,7 +298,7 @@ class Game:
     def round_finish(self):
         #assign secrets
         for player in self.players:
-            self.table_cards[player.card_secret].add_player_card(player)
+            player.card_secret.add_player_card(player)
 
         #move coins and count pts
         self.round_result = dict()
@@ -354,8 +349,8 @@ class Game:
             print(f"Player {player.id}:")
         
             print("Cards: ",end="")
-            for card_id in range(len(player.cards_on_hand)):
-                print(f"{card_id}[{self.table_cards[player.cards_on_hand[card_id]].full_name() }], ", end="")
+            for index,card in enumerate(player.cards_on_hand):
+                print(f"{index}[{card.full_name() }], ", end="")
 
             print()
             player.actions_available(verbose=True)
@@ -370,10 +365,10 @@ class Game:
             print(f"Player {player.id} results: {result['cards']} cards, {result['points']} pts")
 
         for player in self.players:
-            print(f"secret of Player {player.id}: {self.table_cards[player.card_secret].full_name()}")
+            print(f"secret of Player {player.id}: {player.card_secret.full_name()}")
             print(f"cards removed by Player {player.id}: ",end="")
             for card in player.cards_removed:
-                print(f"{self.table_cards[card].full_name()}, ",end="")
+                print(f"{card.full_name()}, ",end="")
             print()
             
 
@@ -385,11 +380,11 @@ def player_action(player,action,cards):
 
     if action == 2:
         for i in range(len(cards)):
-            print(f"{i+1}: {g.table_cards[cards[i][0]].full_name()} / {g.table_cards[cards[i][1]].full_name()}")
+            print(f"{i+1}: {cards[i][0].full_name()} / {cards[i][1].full_name()}")
 
     elif action == 3:
         for i in range(len(cards)):
-            print(f"{i+1}: {g.table_cards[cards[i]].full_name()}")
+            print(f"{i+1}: {cards[i].full_name()}")
 
     while True: 
         out = int(input("Card/Set?: "))-1
@@ -403,7 +398,6 @@ def player_action(player,action,cards):
 
 def play():
     g = Game()
-    g.start()
     g.player_action_cb = player_action
 
     player_starting = g.first_player()
@@ -481,7 +475,6 @@ def test_cb(player,action,cards):
 def test():
 
     g = Game()
-    g.start()
     g.player_action_cb = test_cb
 
     player_starting = g.first_player()
@@ -533,3 +526,4 @@ def test():
 
 if __name__ == "__main__":
     test()
+    #play()
