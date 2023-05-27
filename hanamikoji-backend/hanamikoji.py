@@ -382,7 +382,7 @@ class Game:
             #draw - no winner or more than one winner
             return None
 
-    def view(self):
+    def view(self,shown_player=None):
         print("TABLE")
         print()
         print("P1\t\tP2")
@@ -391,8 +391,13 @@ class Game:
 
         print()
 
-        
-        for player in self.players:
+        if shown_player in self.players:
+            players_to_show = [shown_player]
+        else:
+            #show all players
+            players_to_show = self.players
+
+        for player in players_to_show:
             print(f"Player {player.id}:")
         
             print("Cards: ",end="")
@@ -539,7 +544,7 @@ def test():
 
                 print(f"player {player.id} move:")
                 g.premove(player)
-                g.view()
+                g.view(shown_player=player)
 
                 cards_comb = []
                 if action == 0:
